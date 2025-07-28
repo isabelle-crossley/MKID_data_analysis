@@ -10,6 +10,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from scipy.optimize import curve_fit
+from scipy.signal import find_peaks
+import re
+import os
+
+
 
 #Seaborn's color palette
 sns.set(style="whitegrid")
@@ -58,17 +63,18 @@ def add_subtract_errors_gaussians(x, params, errors):
     return fwhm_error
 
 
-def analyze_data(file_path, file_path_mf, label, bins=100, fit_range=None, phase_shift_error = 0):
+def analyze_data(file_path_mf, bins=100, colour = 'Blue', drive_power = '40', ADC = '10', fit_range=None, phase_shift_error = 0, fit_phase_bounds = None):
     # Open the HDF5 files in read-only mode
-    h5file = h5py.File(file_path, 'r')
     h5file_mf = h5py.File(file_path_mf, 'r')
+    
+    # Extract date (e.g., '250717') from file path
+    match = re.search(r'(\d{6})', file_path_mf)
+    date_str = match.group(1) if match else "UnknownDate"
 
     # Access specific datasets
-    dataset = h5file['event_time']  
     dataset_mf = h5file_mf['matched_filtered'] 
 
     # Read data from datasets
-    data = dataset[()]
     data_mf = dataset_mf[()]
 
     # Create histogram 
@@ -77,9 +83,29 @@ def analyze_data(file_path, file_path_mf, label, bins=100, fit_range=None, phase
 
     # Plot histogram
     plt.hist(data_mf, bins=bins, facecolor=color_palette[0], linewidth=0, alpha=0.6)
+    
+    # Detect peaks
+    peak_indices, _ = find_peaks(hist, distance=10, height=np.max(hist)*0.1)  # Tune height if needed
+    peak_centers = bin_centers[peak_indices]
+    
+    if len(peak_centers) == 0:
+        print("No peaks found. Using fallback fit range.")
+        fit_data = data_mf[6000:-1]
+    else:
+        # Choose the rightmost peak for the laser
+        peak_to_fit = peak_centers[-1]
+        window = 1.0  # +/- window around the peak center, tune this
+        phase_min = peak_to_fit - window
+        phase_max = peak_to_fit + window
+        mask = (data_mf >= phase_min) & (data_mf <= phase_max)
+        fit_data = data_mf[mask]
+        print(f"Automatically fitting peak at phase ~{peak_to_fit:.2f}")
+
+    plt.plot(bin_centers, hist, linestyle = '-', color = 'lightblue')
+    plt.plot(peak_centers, hist[peak_indices], "rx", color = 'black')
 
     # Gaussian fit
-    initial_guess = [np.max(hist), np.mean(data_mf[300:1200]), np.std(data_mf[300:1200])]
+    initial_guess = [np.max(hist), np.mean(fit_data), np.std(fit_data)]
     popt, pcov = curve_fit(gaussian, bin_centers, hist, p0=initial_guess)
 
     # Extract fitted params
@@ -90,12 +116,19 @@ def analyze_data(file_path, file_path_mf, label, bins=100, fit_range=None, phase
     delta_A, delta_mean, delta_std_dev = errors
 
     # Create x values for the Gaussian
-    x = np.linspace(min(data_mf[0:1450]), max(data_mf[0:1450]), 1450)
+    x = np.linspace(min(data_mf), max(data_mf), 2000)
     # Calculate the corresponding y values for the Gaussian fit curve
     y = gaussian(x, A, mean, std_dev)
 
     # Plot Gaussian fit
-    plt.plot(x, y, 'g', linestyle='--', linewidth=2, label=f"{label} fit")
+    plt.plot(x, y, linestyle='--', linewidth=2, label=f"{colour} laser fit", color = colour)
+    
+    plt.xlabel('Phase Shift')
+    plt.ylabel('Counts')
+    plt.grid(False)
+    plt.title(f'{date_str} - Gaussian Fit for the Data with 1 Res at {drive_power}dB with {ADC}dB ADC')
+    plt.legend()
+    plt.show()
 
     # FWHM calculation
     fwhm_original = calculate_fwhm(x, y)
@@ -114,25 +147,18 @@ def analyze_data(file_path, file_path_mf, label, bins=100, fit_range=None, phase
     energy_res_error = energy_res*np.sqrt((phase_shift_error/phase_shift)**2+(fwhm_error/fwhm_original)**2)
     
     # Print and return results
-    print(f'{label} Gaussian fit params:', A, '+/-', errors[0], mean, '+/-', errors[1], std_dev, '+/-', errors[2])
-    print(f'{label} FWHM value:', fwhm_original, '+/-', fwhm_error )
-    print(f'{label} energy res value:', energy_res, '+/-', energy_res_error )
+    print(f'{colour} Gaussian fit params:', A, '+/-', errors[0], mean, '+/-', errors[1], std_dev, '+/-', errors[2])
+    print(f'{colour} FWHM value:', fwhm_original, '+/-', fwhm_error )
+    print(f'{colour} energy res value:', energy_res, '+/-', energy_res_error )
     
     return A, mean, std_dev, fwhm_original, fwhm_error, energy_res, energy_res_error
 
 # Example usage:
-file_path = r"D:\Isabelle\isabelle_data\250717\GREEN40\output\PERFECT_MF\GREEN40\event_time.h5"
-file_path_mf =r"D:\Isabelle\isabelle_data\250717\GREEN40\output\PERFECT_MF\GREEN40\matched_filtered.h5"
+file_path_mf =r"D:\Isabelle\isabelle_data\250717\GREEN45\output\PERFECT_MF\GREEN45\matched_filtered.h5"
 
 # You can call this function for different datasets
-analyze_data(file_path, file_path_mf, label="Red Laser", bins=100, fit_range=[300, 1200])
+analyze_data(file_path_mf, colour = 'Green', drive_power = '45', ADC = '7' , bins=100, fit_phase_bounds = [3,12])
 
-plt.xlabel('Phase Shift')
-plt.ylabel('Counts')
-plt.grid(False)
-plt.title('Gaussian Fit for the Data with 1 Res at 33dB')
-plt.legend()
-plt.show()
 
 
 
