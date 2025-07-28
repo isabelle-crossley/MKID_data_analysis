@@ -5,6 +5,12 @@ Created on Fri Nov 10 13:34:11 2023
 @author: isabe
 """
 
+
+'''
+INSTRUCTIONS: JUST EDIT FILEPATH AND CHANGE PARAMETERS WHEN ANALYSE_DATA IS CALLED
+'''
+
+
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
