@@ -69,7 +69,10 @@ def add_subtract_errors_gaussians(x, params, errors):
     return fwhm_error
 
 
-def analyze_data(file_path_mf, bins=100, colour = 'Blue', drive_power = '40', ADC = '10', fit_range=None, phase_shift_error = 0, fit_phase_bounds = None):
+def analyze_data(file_path_mf, bins=100, colour='Blue', drive_power='40', ADC='10',
+                 fit_range=None, phase_shift_error=0, fit_phase_bounds=None,
+                 save_plot_dir=None, position_tag=None):
+
     # Open the HDF5 files in read-only mode
     h5file_mf = h5py.File(file_path_mf, 'r')
     
@@ -134,7 +137,18 @@ def analyze_data(file_path_mf, bins=100, colour = 'Blue', drive_power = '40', AD
     plt.grid(False)
     plt.title(f'{date_str} - Gaussian Fit for the Data with 1 Res at {drive_power}dB with {ADC}dB ADC')
     plt.legend()
-    plt.show()
+    
+    # Save plot
+    if save_plot_dir and position_tag:
+        os.makedirs(save_plot_dir, exist_ok=True)
+        save_path = os.path.join(save_plot_dir, f"histogram_{position_tag}.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"✅ Saved plot to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
 
     # FWHM calculation
     fwhm_original = calculate_fwhm(x, y)
@@ -160,10 +174,41 @@ def analyze_data(file_path_mf, bins=100, colour = 'Blue', drive_power = '40', AD
     return A, mean, std_dev, fwhm_original, fwhm_error, energy_res, energy_res_error
 
 # Example usage:
-file_path_mf =r"D:\Isabelle\isabelle_data\250717\GREEN45\output\PERFECT_MF\GREEN45\matched_filtered.h5"
+file_path_mf =r"D:\Isabelle\isabelle_data\250730\scan\x4y2\output\PERFECT_MF\matched_filtered.h5"
 
 # You can call this function for different datasets
-analyze_data(file_path_mf, colour = 'Green', drive_power = '45', ADC = '7' , bins=100, fit_phase_bounds = [3,12])
+analyze_data(file_path_mf, colour = 'Red', drive_power = '40', ADC = '10' , bins=100, fit_phase_bounds = [3,12])
+
+
+''' OPTIONAL IF DOING MANY FILES FOR SCAN: '''
+
+base_path = r"D:\Isabelle\isabelle_data\250730\scan"
+sub_path = r"output\PERFECT_MF\matched_filtered.h5"
+
+save_plot_dir = r"D:\Isabelle\isabelle_data\250730\PLOTS\histogram_plots"
+
+for x in range(1, 6):         # x1 to x5
+    for y in range(1, 11):    # y1 to y10
+        pos_folder = f"x{x}y{y}"
+        file_path_mf = os.path.join(base_path, pos_folder, sub_path)
+
+        if os.path.exists(file_path_mf):
+            print(f"\nAnalyzing file at {file_path_mf}")
+            try:
+                analyze_data(
+                    file_path_mf,
+                    colour='Red',
+                    drive_power='40',
+                    ADC='10',
+                    bins=100,
+                    fit_phase_bounds=[3, 12],
+                    save_plot_dir=save_plot_dir,
+                    position_tag=pos_folder
+                )
+            except Exception as e:
+                print(f"⚠️ Error analyzing {pos_folder}: {e}")
+        else:
+            print(f"Skipping missing file at {pos_folder}")
 
 
 
